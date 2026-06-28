@@ -1,10 +1,10 @@
 steps:
-  # 1. 构建镜像 (注意路径切换到 backend 目录)
+  # 1. 构建镜像
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Build Backend Image'
     args: [
-      'build', 
-      '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest', 
+      'build',
+      '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest',
       './backend'
     ]
 
@@ -12,12 +12,13 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push Image'
     args: [
-      'push', 
+      'push',
       'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest'
     ]
 
+  # 3. 部署到 Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'Deploy to Cloud Run with Ingress Control'
+    id: 'Deploy to Cloud Run'
     entrypoint: gcloud
     args: [
       'run', 'deploy', 'api-service',
@@ -26,9 +27,9 @@ steps:
       '--network', '${_VPC}',
       '--subnet', '${_SUBNET}',
       '--vpc-egress', 'all-traffic',
-      '--allow-unauthenticated', # 允许匿名访问，但仅限通过 LB 进来的匿名流量
+      '--allow-unauthenticated',
       '--ingress', 'internal-and-cloud-load-balancing',
-      '--service-account', '${_SERVICE_ACCOUNT}@$PROJECT_ID.iam.gserviceaccount.com',
+      '--service-account', '${_SERVICE_ACCOUNT}',
       '--add-cloudsql-instances', '${_HOST_NAME}',
       '--set-env-vars', 'HOST_NAME=${_HOST_NAME}',
       '--set-secrets', 'DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest'
