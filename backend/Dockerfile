@@ -21,4 +21,4 @@ COPY . .
 # 6. 启动服务
 # Cloud Run 会自动注入 $PORT 环境变量（默认为 8080）
 # 使用 exec 模式启动可以让容器更好地接收来自 GCP 的终止信号，实现平滑关闭
-CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
+CMD exec uvicorn main:app --host 0.0.0.0 --port 8080
