@@ -1,4 +1,3 @@
-cat > backend/main.py << 'EOF'
 import os
 from typing import List
 from fastapi import FastAPI, APIRouter, Depends, HTTPException
