@@ -2,29 +2,34 @@ import os
 from typing import List
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
+import pymysql
 
 # ==================== 1. 数据库配置 ====================
-# 建议在 Cloud Run 的环境变量中配置以下信息
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "password123")
 HOST_NAME = os.getenv("HOST_NAME", "127.0.0.1")
-HOST_PORT = os.getenv("HOST_PORT", "3306")
 DB_NAME = os.getenv("DB_NAME", "demo_db")
 
-# 生产环境建议使用私有 IP 或 Cloud SQL Auth Proxy
-# DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{HOST_NAME}:{HOST_PORT}/{DB_NAME}"
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?unix_socket=/cloudsql/{HOST_NAME}"
+# 先用无数据库的 URL 连接，创建数据库
+DATABASE_URL_BASE = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?unix_socket=/cloudsql/{HOST_NAME}"
 
+try:
+    engine_base = create_engine(DATABASE_URL_BASE, pool_pre_ping=True)
+    with engine_base.connect() as conn:
+        conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}"))
+        print(f"Database '{DB_NAME}' created or already exists")
+except Exception as e:
+    print(f"Database creation warning: {e}")
+
+# 使用带数据库的 URL 连接
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?unix_socket=/cloudsql/{HOST_NAME}"
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-
-print(HOST_NAME)
-print(DATABASE_URL)
 
 # ==================== 2. 数据库模型 ====================
 class DBUser(Base):
@@ -33,6 +38,13 @@ class DBUser(Base):
     name = Column(String(50), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# 创建表
+try:
+    Base.metadata.create_all(bind=engine)
+    print("Tables created successfully")
+except Exception as e:
+    print(f"Table creation warning: {e}")
 
 # ==================== 3. Pydantic 模型 ====================
 class UserCreate(BaseModel):
@@ -49,8 +61,6 @@ class UserResponse(BaseModel):
 
 # ==================== 4. 核心路由配置 ====================
 app = FastAPI(title="GCP Full-Stack API")
-
-# 创建带有 /api 前缀的路由组
 api_router = APIRouter(prefix="/api")
 
 def get_db():
@@ -84,5 +94,18 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
     return None
 
-# 将带前缀的路由注册到 app
 app.include_router(api_router)
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "host": HOST_NAME}
+
+@app.get("/test-db")
+def test_db():
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            return {"status": "DB connected", "result": result.scalar()}
+    except Exception as e:
+        return {"status": "DB error", "error": str(e)}
