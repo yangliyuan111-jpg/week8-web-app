@@ -1,0 +1,36 @@
+steps:
+  # 1. 构建前端 Nginx 镜像 (路径指向 ./frontend)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build Frontend Image'
+    args: [
+      'build', 
+      '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/frontend-image:latest', 
+      './frontend'
+    ]
+
+  # 2. 推送镜像到 Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push Frontend Image'
+    args: [
+      'push', 
+      'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/frontend-image:latest'
+    ]
+
+  # 3. 部署到 Cloud Run (实现严格的安全控制)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy Frontend to Cloud Run'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', 'frontend-service',
+      '--image', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/frontend-image:latest',
+      '--region', 'asia-northeast1',
+      '--allow-unauthenticated', 
+      '--ingress', 'internal-and-cloud-load-balancing',
+      '--quiet'
+    ]
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/frontend-image:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

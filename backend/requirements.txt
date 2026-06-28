@@ -1,0 +1,13 @@
+# 基础 Web 框架与服务器
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# 数据库连接与 ORM
+sqlalchemy==2.0.31
+pymysql==1.1.1
+
+# 数据验证（包含邮箱格式校验）
+pydantic[email]==2.7.4
+
+# MySQL 连接可能需要的加密库
+cryptography==42.0.8

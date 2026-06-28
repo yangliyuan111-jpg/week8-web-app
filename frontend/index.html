@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCP 实操：Week8</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f4f8;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
+        
+        /* 表单样式 */
+        .form-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            align-items: flex-end;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        .input-field label { font-size: 0.85rem; color: #666; margin-bottom: 5px; font-weight: bold; }
+        .input-field input {
+            padding: 10px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .input-field input:focus { border-color: #1a73e8; outline: none; }
+        
+        /* 按钮通用样式 */
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-primary:hover { background: #1557b0; }
+        .btn-edit { background: #fbbc05; color: #333; padding: 5px 10px; font-size: 0.85rem; margin-right: 5px;}
+        .btn-edit:hover { background: #e3a804; }
+        .btn-delete { background: #ea4335; color: white; padding: 5px 10px; font-size: 0.85rem; }
+        .btn-delete:hover { background: #c53026; }
+        
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        th { background-color: #f1f3f4; color: #5f6368; }
+        tr:hover { background-color: #f8f9fa; }
+        
+        .status-msg { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #e6f4ea; color: #137333; }
+        .error { background: #fce8e6; color: #c5221f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>GCP 实操：Week8</h1>
+    
+    <!-- 提示信息区域 -->
+    <div id="statusMsg" class="status-msg"></div>
+
+    <!-- 增/改 表单 -->
+    <div class="form-group">
+        <input type="hidden" id="userId"> <!-- 用于记录当前修改的用户ID -->
+        <div class="input-field">
+            <label for="userName">姓名</label>
+            <input type="text" id="userName" placeholder="请输入姓名">
+        </div>
+        <div class="input-field">
+            <label for="userEmail">邮箱</label>
+            <input type="email" id="userEmail" placeholder="example@domain.com">
+        </div>
+        <button id="submitBtn" class="btn-primary" onclick="handleSave()">添加用户</button>
+        <button id="cancelBtn" style="display:none; background:#9aa0a6; color:white;" onclick="resetForm()">取消</button>
+    </div>
+
+    <!-- 查 列表 -->
+    <h2>用户列表</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>姓名</th>
+                <th>邮箱</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="userTableBody">
+            <tr>
+                <td colspan="4" style="text-align: center; color: #999;">正在加载数据...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // ================= 配置区域 =================
+    // 💡 培训提示：让学员将此处替换为实际部署在 Cloud Run 上的 FastAPI 服务公网 URL
+    const API_BASE_URL = "/api"; 
+
+    // 页面加载完成后自动拉取数据
+    document.addEventListener("DOMContentLoaded", fetchUsers);
+
+    // 显示提示信息
+    function showMsg(text, isSuccess) {
+        const msgDiv = document.getElementById("statusMsg");
+        msgDiv.innerText = text;
+        msgDiv.className = `status-msg ${isSuccess ? 'success' : 'error'}`;
+        msgDiv.style.display = "block";
+        setTimeout(() => { msgDiv.style.display = "none"; }, 3000);
+    }
+
+    // 1. 【查】异步获取用户列表并渲染表格
+    async function fetchUsers() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/users`);
+            if (!res.ok) throw new Error("获取数据失败");
+            const users = await res.json();
+            
+            const tbody = document.getElementById("userTableBody");
+            if (users.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #999;">暂无数据</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.id}</td>
+                    <td>${user.name}</td>
+                    <td>${user.email}</td>
+                    <td>
+                        <button class="btn-edit" onclick="prepareEdit(${user.id}, '${user.name}', '${user.email}')">编辑</button>
+                        <button class="btn-delete" onclick="deleteUser(${user.id})">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            document.getElementById("userTableBody").innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">无法连接到后端 API 服务</td></tr>`;
+        }
+    }
+
+    // 2. 【增/改】中转处理
+    function handleSave() {
+        const id = document.getElementById("userId").value;
+        if (id) {
+            updateUser(id);
+        } else {
+            createUser();
+        }
+    }
+
+    // 3. 【增】发送 POST 请求创建用户
+    async function createUser() {
+        const name = document.getElementById("userName").value;
+        const email = document.getElementById("userEmail").value;
+        if(!name || !email) return showMsg("请填写完整信息", false);
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/users`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showMsg("添加成功！", true);
+                resetForm();
+                fetchUsers();
+            } else {
+                showMsg(data.detail || "添加失败", false);
+            }
+        } catch (err) {
+            showMsg("网络错误，请求失败", false);
+        }
+    }
+
+    // 4. 【改】点击编辑按钮时，将数据回显到表单中
+    function prepareEdit(id, name, email) {
+        document.getElementById("userId").value = id;
+        document.getElementById("userName").value = name;
+        document.getElementById("userEmail").value = email;
+        document.getElementById("submitBtn").innerText = "保存修改";
+        document.getElementById("cancelBtn").style.display = "inline-block";
+    }
+
+    // 5. 【改】发送 PUT 请求保存修改
+    async function updateUser(id) {
+        const name = document.getElementById("userName").value;
+        const email = document.getElementById("userEmail").value;
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showMsg("更新成功！", true);
+                resetForm();
+                fetchUsers();
+            } else {
+                showMsg(data.detail || "更新失败", false);
+            }
+        } catch (err) {
+            showMsg("网络错误，请求失败", false);
+        }
+    }
+
+    // 6. 【删】发送 DELETE 请求删除数据
+    async function deleteUser(id) {
+        if(!confirm("确定要删除该用户吗？")) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/users/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                showMsg("删除成功！", true);
+                fetchUsers();
+            } else {
+                showMsg("删除失败", false);
+            }
+        } catch (err) {
+            showMsg("网络错误，请求失败", false);
+        }
+    }
+
+    // 重置表单状态
+    function resetForm() {
+        document.getElementById("userId").value = "";
+        document.getElementById("userName").value = "";
+        document.getElementById("userEmail").value = "";
+        document.getElementById("submitBtn").innerText = "添加用户";
+        document.getElementById("cancelBtn").style.display = "none";
+    }
+</script>
+</body>
+</html>

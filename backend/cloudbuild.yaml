@@ -1,0 +1,41 @@
+steps:
+  # 1. 构建镜像 (注意路径切换到 backend 目录)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build Backend Image'
+    args: [
+      'build', 
+      '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest', 
+      './backend'
+    ]
+
+  # 2. 推送镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push Image'
+    args: [
+      'push', 
+      'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest'
+    ]
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy to Cloud Run with Ingress Control'
+    entrypoint: gcloud
+    args: [
+      'run', 'deploy', 'api-service',
+      '--image', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest',
+      '--region', 'asia-northeast1',
+      '--network', '${_VPC}',
+      '--subnet', '${_SUBNET}',
+      '--vpc-egress', 'all-traffic',
+      '--allow-unauthenticated', # 允许匿名访问，但仅限通过 LB 进来的匿名流量
+      '--ingress', 'internal-and-cloud-load-balancing',
+      '--service-account', '${_SERVICE_ACCOUNT}@$PROJECT_ID.iam.gserviceaccount.com',
+      '--add-cloudsql-instances', '${_HOST_NAME}',
+      '--set-env-vars', 'HOST_NAME=${_HOST_NAME}',
+      '--set-secrets', 'DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest'
+    ]
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/api-image:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
